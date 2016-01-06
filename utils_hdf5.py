@@ -23,16 +23,16 @@ class HDF5(object):
     def __init__(self,*args):
         classname = self.__class__.__name__
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name
-        self.unit = h5py.File(*args)
-        self.filename = self.unit.filename
-        if self.unit.mode == "r":
+        self.fileObj = h5py.File(*args)
+        self.filename = self.fileObj.filename
+        if self.fileObj.mode == "r":
             self.read_only = True
-        elif self.unit.mode == "r+":
+        elif self.fileObj.mode == "r+":
             self.read_only = False
         return
     
     def close(self):
-        self.unit.close()
+        self.fileObj.close()
         return
 
     ##############################################################################
@@ -48,8 +48,8 @@ class HDF5(object):
 
               Input: dir -- path to HDF5 group.       
         """
-        if hdfdir not in self.unit:
-            g = self.unit.create_group(hdfdir)
+        if hdfdir not in self.fileObj:
+            g = self.fileObj.create_group(hdfdir)
         return
 
     
@@ -62,8 +62,8 @@ class HDF5(object):
 
               Input: dir -- path to HDF5 group.       
         """
-        if hdfdir in self.unit:
-            del self.unit[hdfdir]
+        if hdfdir in self.fileObj:
+            del self.fileObj[hdfdir]
         return
 
 
@@ -85,16 +85,30 @@ class HDF5(object):
                                               
         """
         # Open second file and get path to group that we want to copy
-        unit = h5py.File(srcfile,"r")        
-        group_path = unit[srcdir].parent.name
+        fileObj = h5py.File(srcfile,"r")        
+        group_path = fileObj[srcdir].parent.name
         # Create same parent group in current file
-        group_id = self.unit.require_group(group_path)
+        group_id = self.fileObj.require_group(group_path)
         # Set name of new group
         if dstdir is None:
             dstdir = srcdir
-        unit.copy(srcdir,group_id,name=dstdir)
-        unit.close()   
+        fileObj.copy(srcdir,group_id,name=dstdir)
+        fileObj.close()   
         return
+
+    
+    def lsdir(self,hdfdir,recursive=False):
+        ls = []
+        thisdir = self.fileObj[hdfdir]        
+        if recursive:
+            def _append_item(name, obj):
+                if isinstance(obj, h5py.Dataset):
+                    ls.append(name)
+            thisdir.visititems(_append_item)
+        else:
+            ls = thisdir.keys()
+        return ls
+
 
 
     ##############################################################################
@@ -107,9 +121,9 @@ class HDF5(object):
                         compression_opts=6,**kwargs):
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name
         # Select HDF5 group
-        if hdfdir not in self.unit.keys():
+        if hdfdir not in self.fileObj.keys():
             self.mkdir(hdfdir)
-        g = self.unit[hdfdir]
+        g = self.fileObj[hdfdir]
         # Write data to group
         value = np.copy(data)
         if name in g.keys():
@@ -136,26 +150,75 @@ class HDF5(object):
                         compression_opts=6,**kwargs):
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name
         # Select HDF5 group
-        if hdfdir not in self.unit.keys():
+        if hdfdir not in self.fileObj.keys():
             self.mkdir(hdfdir)
-        g = self.unit[hdfdir]
+        g = self.fileObj[hdfdir]
         # Write data to group
         for n in data.dtype.names:
-            value = data[n]
-            if n in g.keys():
-                write_key = False
-                if append:
-                    value = np.append(np.copy(g[n]),value)
-                    del g[n]
-                    write_key = True
-                if overwrite:
-                    del g[n]
-                    write_key = True
-            else:
-                write_key = True
-            if write_key:                
-                dset = g.create_dataset(n,data=value,maxshape=maxshape,\
-                                            chunks=chunks,compression=compression,\
-                                            compression_opts=compression_opts,**kwargs)
-            del value            
+            self.add_dataset(hdfdir,n,data[n],append=append,overwrite=overwrite,\
+                                 maxshape=maxshape,chunks=chunks,compression=compression,\
+                                 compression_opts=compression_opts,**kwargs)
         return
+
+
+    def ls_datasets(self,hdfdir):
+        objs = self.lsdir(hdfdir,recursive=False)             
+        dsets = []
+        def _is_dataset(obj):
+            return isinstance(self.fileObj[hdfdir+"/"+obj],h5py.Dataset)        
+        return filter(_is_dataset,objs)
+
+
+    def read_dataset(self,hdfdir,recursive=False,required=None,exit_if_missing=True):
+        """
+        read_dataset(): Read one or more HDF5 datasets.
+
+        USAGE:   data = HDF5().read_dataset(hdfdir,[recursive],[required],[exist_if_missing])
+        
+        Inputs:
+               hdfdir : Path to dataset or group of datasets to read.
+               recursive : If reading HDF5 group, read recursively down subgroups. 
+                           (Default = False)
+               required : List of names of datasets to read. If required=None, will read
+                          all datasets. (Default = None).
+               exit_if_missing : Will raise error and exit if any of names in 'required'
+                                 are missing. (Default = True).
+        
+        Outputs:
+               data : Dictionary of datasets (stored as Numpy arrays).
+
+        """
+        funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name        
+        data = {}
+        if isinstance(self.fileObj[hdfdir],h5py.Dataset):
+            # Read single dataset
+            if hdfdir not in self.fileObj:
+                raise KeyError(funcname+"(): "+hdfdir+" not found in HDF5 file!")        
+            name = hdfdir.split("/")[-1]
+            data[name] = np.array(self.fileObj[hdfdir])
+        elif isinstance(self.fileObj[hdfdir],h5py.Group):
+            # Read datasets in group
+            # i) List datasets (recursively if specified)
+            if recursive:
+                objs = self.lsdir(hdfdir,recursive=recursive)                     
+            else:
+                objs = self.ls_datasets(hdfdir)   
+            if required is not None:                
+                missing = list(set(required).difference(objs))
+                if len(missing) > 0:
+                    dashed = "-"*10
+                    err = dashed+"\n"+funcname+"(): Following keys are missing from "+\
+                        hdfdir+":\n     "+"\n     ".join(missing)+"\n"+dashed
+                    print(err)
+                    raise KeyError(funcname+"(): Some required keys cannot be found in "+hdfdir+"!")
+                objs = list(set(objs).intersection(required))                
+            # ii) Store in dictionary
+            def _store_dataset(obj):
+                data[obj] = np.array(self.fileObj[hdfdir+"/"+obj])
+            map(_store_dataset,objs)
+        return data
+                            
+            
+        
+        
+
