@@ -195,7 +195,7 @@ class HDF5(object):
             if hdfdir not in self.fileObj:
                 raise KeyError(funcname+"(): "+hdfdir+" not found in HDF5 file!")        
             name = hdfdir.split("/")[-1]
-            data[name] = np.array(self.fileObj[hdfdir])
+            data[str(name)] = np.array(self.fileObj[hdfdir])
         elif isinstance(self.fileObj[hdfdir],h5py.Group):
             # Read datasets in group
             # i) List datasets (recursively if specified)
@@ -214,7 +214,7 @@ class HDF5(object):
                 objs = list(set(objs).intersection(required))                
             # ii) Store in dictionary
             def _store_dataset(obj):
-                data[obj] = np.array(self.fileObj[hdfdir+"/"+obj])
+                data[str(obj)] = np.array(self.fileObj[hdfdir+"/"+obj])
             map(_store_dataset,objs)
         return data
                             
