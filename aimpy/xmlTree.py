@@ -45,18 +45,42 @@ class xmlTree(object):
             elem = self.getElement("/".join(nodes)).find(node)                        
         return elem
 
-    def createElement(self,name,attrib={},parent=None):        
+    def createElement(self,name,attrib={},parent=None,text=None,overwrite=False):        
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name        
+        if name in self.treeMap.keys() and not overwrite:
+            return
+        if name in self.treeMap.keys() and overwrite:
+            elem = getElement(self.treeMap[name]).clear
         if parent is None or parent==self.root.tag:
             path = self.root.tag
             parent = self.root
         else:
             path = self.treeMap[parent]
             parent = self.getElement(path)
-        ET.SubElement(parent,name,attrib=attrib)
+        if parent is None:
+            raise ValueError(funcname+"(): error in path to parent element -- some nodes missing?"+\
+                                 "    \nParent path = "+path)        
+        if text is None:
+            ET.SubElement(parent,name,attrib=attrib)
+        else:
+            ET.SubElement(parent,name,attrib=attrib).text = str(text)
         self.treeMap[name] = path+"/"+name
         return
     
+    def setElement(self,name,attrib={},text=None,parent=None,selfCreate=False):
+        funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name        
+        if name not in self.treeMap.keys():
+            if selfCreate:
+                self.createElement(name,attrib=attrib,parent=parent,text=text)
+            else:
+                raise KeyError(funcname+"(): element does not exist!")
+        elem = self.getElement(self.treeMap[name])
+        dummy = [elem.set(k,attrib[k]) for k in attrib.keys()]
+        del dummy
+        if text is not None:
+            elem.text = text
+        return
+
     def appendElement(self,newBranch,parent=None):
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name
         if parent is None:
