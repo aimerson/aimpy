@@ -94,7 +94,7 @@ class xmlTree(object):
         for nodeName in nodes:
             node = parentNode.find(nodeName)
             if node is None:
-                self.createBranch(nodeName,parent=parentNode.tag)
+                self.createElement(nodeName,parent=parentNode.tag)
             else:
                 parentNode = node
         node.append(newBranch)
