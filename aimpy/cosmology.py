@@ -1,20 +1,20 @@
 #! /usr/bin/env python
 
+import sys,fnmatch
 import numpy as np
 import scipy as sp
 from scipy.constants import c,constants
 from scipy.integrate import romberg
+from .constants import Pi,massSolar,Parsec
 
-class cosmology:
+class Cosmology(object):
     """
-    cosmology
-    
-    This class contains various functions to compute distances and
-    times in a Universe with a given cosmology.
+    Cosmology: class to compute distances and times in 
+               a Universe with a given cosmology.
     
     List of functions:
 
-    parameters() : report back parameters for specified cosmology
+    report_parameters() : report back parameters for specified cosmology
     comoving_distance() : calculates the comoving distance at
                           redshift, z
     redshift_at_distance() : calculates the redshift at comoving
@@ -43,52 +43,72 @@ class cosmology:
     
     """
     
-    def __init__(self,omega0=0.25,lambda0=0.75,omegab=0.045,h0=0.73,\
-                 sigma8=0.9,ns=1.0,radiation=False):
+    def __init__(self,omega0=0.25,lambda0=0.75,omegab=0.045,h0=0.73,sigma8=0.9,ns=1.0,\
+                     radiation=False,zmax=20.0,nzmax=10000,h_independent=True):
+        classname = self.__class__.__name__
+        funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name
 
-        #
         # Store cosmological parameters
-        #
-        self._WM = omega0
-        self._WV = lambda0
-        self._WB = omegab
-        self._h = h0
-        self._sigma8 = sigma8
-        self._ns = ns
+        self.omega0 = omega0
+        self.lambda0 = lambda0
+        self.omegab = omegab
+        self.h0 = h0
+        self.sigma8 = sigma8
+        self.ns = ns
         if radiation:            
-            self._WR = (4.165e-5)/(self._h**2)
+            self.omegar = (4.165e-5)/(self.h0**2)
         else:
-            self._WR = 0.0            
-        self._WK = 1.0 - (self._WM + self._WV + self._WR)
+            self.omegar = 0.0            
+        self.omegak = 1.0 - (self.omega0 + self.lambda0 + self.omegar)
 
+        # Store value for Hubble Constant
+        if h_independent:
+            self.H0 = 100
+        else:
+            self.H0 = 100.0*self.h0
+        self.h_independent = h_independent
+        
         # Define useful constants/conversions
-        self._nzmax = 10000
-        self._zmax = 20.0
+        self.Mpc = constants.mega*Parsec        
+        self.Gyr = constants.giga*constants.year
+        self._kmpersec_to_mpchpergyr = constants.kilo*(self.Gyr/self.Mpc)*self.h0                
+        self.H0SI = self.H0*constants.kilo/self.Mpc
+        self.HubbleTime = (self.Mpc/(self.H0*constants.kilo))/self.Gyr
+        self.HubbleDistance = c/constants.kilo/self.H0
+        self.HubbleVolume = self.HubbleDistance**3
+
+        # Compute critical density
+        self.criticalDensity = (3.0*(100**2)/8.0/Pi/constants.G)
+        self.criticalDensity *=(constants.kilo/self.Mpc)**2
+        self.criticalDensity /= massSolar/(self.Mpc**3)
+
+        # Set up array of redshift vs. comoving distance for
+        # interpolation for other properties
+        self._nzmax = nzmax
+        self._zmax = zmax
         self._r_comoving = np.zeros(self._nzmax)
         self._dz = self._zmax/float(self._nzmax)
         self._redshift = np.arange(0.0,self._zmax,self._dz)
         self._inv_dz = 1.0/self._dz
-        self._Mpc = constants.mega*constants.parsec
-        self._H100 = 100.0*constants.kilo/self._Mpc
-        self._Gyr = constants.giga*constants.year
-        self._invH0 = (self._Mpc/(100.0*constants.kilo))/self._Gyr
-        self._kmpersec_to_mpchpergyr = constants.kilo*(self._Gyr/self._Mpc)*self._h
-        self._DH = c/self._H100 # Hubble Distance
+        self._initialize_redshift_array = True
 
-        # Set up array of redshift vs. comoving distance for
-        # interpolation for other properties
-        def finit(z):
-            a = 1.0/(1.0+z)
-            result = self._WK*(a**-2) + self._WV + \
-                     self._WM*(a**-3) + self._WR*(a**-4)
-            result = (c/self._H100)/np.sqrt(result)/self._Mpc
-            return result
-        for i in range(1,len(self._redshift)):
-            z1 = self._redshift[i-1]
-            z2 = self._redshift[i]
-            self._r_comoving[i] = self._r_comoving[i-1] + \
-                                  romberg(finit,z1,z2)
+        return
 
+
+    def report_parameters(self):
+        report = "\nCOSMOLOGY:\n" + \
+            "   Omega_M = {0:5.3f}\n".format(self.omega0) + \
+            "   Omega_b = {0:5.3f}\n".format(self.omegab) + \
+            "   Omega_V = {0:5.3f}\n".format(self.lambda0) + \
+            "   h       = {0:5.3f}\n".format(self.h0) + \
+            "   sigma_8 = {0:5.3f}\n".format(self.sigma8) + \
+            "   n_s     = {0:5.3f}\n".format(self.ns) + \
+            "   Omega_R = {0:5.3e}\n".format(self.omegar) + \
+            "   Omega_k = {0:5.3f}\n".format(self.omegak)
+        report = "-"*30 + report + "-"*30 + "\n"
+        print(report)
+        return
+    
 
     def E(self,z=0.0):
         """
@@ -96,20 +116,20 @@ class cosmology:
         
         """
         a = 1.0/(1.0+z)
-        result = self._WK*(a**-2) + self._WV + \
-                 self._WM*(a**-3) + self._WR*(a**-4)
+        result = self.omegak*(a**-2) + self.lambda0 + \
+                 self.omega0*(a**-3) + self.omegar*(a**-4)
         return np.sqrt(result)
-    
+
 
     def H(self,z=0.0):
         """
         H(z): Function to return the Hubble parameter as measured
               by an observer at redshift, z.
         """
-        result = 100.0*self.E(z)
+        result = self.H0*self.E(z)
         return result
-    
 
+    
     def f(self,z=0.0):
         """
         f(z): Function relating comoving distance to redshift.
@@ -119,30 +139,21 @@ class cosmology:
         Note: uses global cosmology variables.          
         """
         a = 1.0/(1.0+z)
-        result = self._WK*(a**-2) + self._WV + \
-                 self._WM*(a**-3) + self._WR*(a**-4)
-        result = (c/self._H100)/np.sqrt(result)/self._Mpc
+        result = self.omegak*(a**-2) + self.lambda0 + \
+                 self.omega0*(a**-3) + self.omegar*(a**-4)
+        result = (c/self.H0SI)/np.sqrt(result)/self.Mpc
         return result
-    
 
-    def parameters(self):
-        """
-        parameters(): reports parameters for cosmology
 
-        USAGE: parameters()            
-        """
-        print "***********************"
-        print "COSMOLOGY:"
-        print "   Omega_M = {0:5.3f}".format(self._WM)
-        print "   Omega_b = {0:5.3f}".format(self._WB)
-        print "   Omega_V = {0:5.3f}".format(self._WV)
-        print "   h       = {0:5.3f}".format(self._h)
-        print "   Omega_R = {0:5.3e}".format(self._WR)
-        print "   Omega_k = {0:5.3f}".format(self._WK)
-        print "   sigma_8 = {0:5.3f}".format(self._sigma8)
-        print "   n_s     = {0:5.3f}".format(self._ns)
-        print "***********************"
+    def _init_redshift_array(self):
+        for i in range(1,len(self._redshift)):
+            z1 = self._redshift[i-1]
+            z2 = self._redshift[i]
+            self._r_comoving[i] = self._r_comoving[i-1] + \
+                                  romberg(self.f,z1,z2)
+        self._initialize_redshift_array = False
         return
+
     
     def comoving_distance(self,z=0.0):
         """
@@ -152,7 +163,10 @@ class cosmology:
         USAGE: comoving_distance(z)
         
         """
+        if self._initialize_redshift_array:
+            self._init_redshift_array()
         return np.interp(z,self._redshift,self._r_comoving)
+
     
     def redshift_at_distance(self,r=0.0):
         """
@@ -162,6 +176,8 @@ class cosmology:
         USAGE: redshift_at_distance(z)
         
         """
+        if self._initialize_redshift_array:
+            self._init_redshift_array()
         return np.interp(r,self._r_comoving,self._redshift)
     
     
@@ -171,22 +187,34 @@ class cosmology:
                            a redshift, z, for the given cosmology.
         
         USAGE: age_of_universe(z)
+
+        Note: equations from Mo, van den Bosch & White (2010) Ch.3 Eq. 3.96-3.99
         
         """
         a = 1.0/(1.0+z)
-        if(self._WM >= 0.99999): # Einstein de Sitter Universe
-            result = self._invH0*2.0*np.sqrt(a)/(3.0*self._h)
+        result = None
+        if np.fabs(self.lambda0) < 1.0e-9: # lambda0 = 0
+            if self.omega0 == 1.0 : 
+                # Einstein de Sitter Universe (Mo et al. 2010, Eq. 3.96)
+                result = self.HubbleTime*(2.0/3.0)*(a**(3.0/2.0))
+            elif self.omega0 < 1:
+                # Open Universe with lambda0 = 0 and omega0 < 1 (Mo et al. 2010, Eq. 3.97)
+                factor1 = self.HubbleTime*self.omega0/2.0/((1.0-self.omega0)**(3.0/2.0))
+                factor2 = 2.0*np.sqrt((1-self.omega0)*(self.omega0*z+1.0))/self.omega0/(1.0+z)
+                factor3 = -np.arccosh((self.omega0*z-self.omega0+2.0)/(self.omega0*(1.0+z)))
+                result = factor1*(factor2+factor3)
+            else:
+                # Closed Universe with lambda = 0 and omega > 1 (Mo et al. 2010, Eq. 3.98)
+                factor1 = self.HubbleTime*self.omega0/2.0/((self.omega0-1.0)**(3.0/2.0))                
+                factor2 = -2.0*np.sqrt((self.omega0-1.0)*(self.omega0*z+1.0))/self.omega0/(1.0+z)
+                factor3 = np.arccos((self.omega0*z-self.omega0+2.0)/(self.omega0*(1.0+z)))
+                result = factor1*(factor2+factor3)
         else:
-            if(self._WV <= 0.0): # Open Universe
-                zplus1 = 1.0/a
-                result1 = self._WM/(2.0*self._h*(1-self._WM)**1.5)
-                result2 = 2.0*np.sqrt(1.0-self._WM)*np.sqrt(self._WM*(zplus1-1.0)+1.0)
-                result3 = np.arccosh((self._WM*(zplus1-1.0)-self._WM+2.0)/(self._WM*zplus1))
-                result = self._invH0*result1*(result2/result3)
-            else: # Flat Universe with non-zero Cosmological Constant
-                result1 = (2.0/(3.0*self._h*np.sqrt(1.0-self._WM)))
-                result2 = np.arcsinh(np.sqrt((1.0/self._WM-1.0)*a)*a)
-                result = self._invH0*result1*result2
+            # Flat Universe with lambda0 + omega0 = 1 (Mo et al. 2010, Eq. 3.99)
+            if np.fabs(self.lambda0+self.omega0-1.0) < 1.0e-9:
+                factor1 = self.HubbleTime*(2.0/3.0)/np.sqrt(self.lambda0)
+                factor2 = np.sqrt(self.lambda0*(a**3)) + np.sqrt(self.lambda0*(a**3)+self.omega0)
+                result = factor1*np.log(factor2/np.sqrt(self.omega0))
         return result
             
             
@@ -202,6 +230,34 @@ class cosmology:
         return t
 
 
+
+    
+    def comoving_transverse_distance(self,z=0.0):
+        """
+        comoving_transverse_distance(): Returns the transverse comoving distance (in Mpc/h or) 
+                                        Mpc) corresponding to redshift, z.
+
+        USAGE: comoving_transverse_distance(z)
+                                        
+
+        Note: from Hogg (1999) Eq.16.
+        """
+        if self.omegak > 0:
+            result = self.HubbleDistance
+            result *= np.sinh(np.sqrt(self.omegak)*self.comoving_distance(z)/self.HubbleDistance)
+            result /= np.sqrt(self.omegak)
+        elif self.omegak < 0:
+            result = self.HubbleDistance
+            result *= np.sin(np.sqrt(np.fabs(self.omegak))*self.comoving_distance(z)/self.HubbleDistance)
+            result /= np.sqrt(np.fabs(self.omegak))
+        else:
+            result = self.comoving_distance(z)
+        return result
+
+
+
+
+
     def angular_diameter_distance(self,z=0.0):
         """
         angular_diameter_distance(): Returns the angular diameter
@@ -210,37 +266,10 @@ class cosmology:
         
         USAGE: angular_diameter_distance(z)    
 
+        Note: from Hogg (1999) Eq.18
+
         """
-        dr = self.comoving_distance(z)*self._Mpc/(c/self._H100)
-        x = np.sqrt(np.abs(self._WK))*dr
-        if np.ndim(x) > 0:
-            ratio = np.ones_like(x)*-1.00
-            mask = (x > 0.1)
-            y = x[np.where(mask)]
-            if(self._WK > 0.0):
-                np.place(ratio,mask,0.5*(np.exp(y)-np.exp(-y))/y)
-            else:
-                np.place(ratio,mask,np.sin(y)/y)
-            mask = (x <= 0.1)
-            y = x[np.where(mask)]**2
-            if(self._WK < 0.0): 
-                y = -y
-            np.place(ratio,mask,1.0 + y/6.0 + (y**2)/120.0)
-        else:        
-            ratio = -1.0
-            if(x > 0.1):
-                if(self._WK > 0.0):
-                    ratio = 0.5*(np.exp(x)-np.exp(-x))/x
-                else:
-                    ratio = np.sin(x)/x
-            else:
-                y = x**2
-                if(self._WK < 0.0): 
-                    y = -y
-                ratio = 1.0 + y/6.0 + (y**2)/120.0
-        dt = ratio*dr/(1.0+z)
-        dA = (c/self._H100)*dt/self._Mpc
-        return dA
+        return self.comoving_transverse_distance(z)/(1.0+z)
 
 
     def angular_scale(self,z=0.0):
@@ -256,6 +285,28 @@ class cosmology:
         return a
     
 
+    def angular_distance_separation(self,z1,z2):
+        """
+        angular_distance_separation(): Returns the angular separation between two 
+                                       objects at redshifts z1 and z2.
+        
+        USAGE: angular_distance_separation(z1,z2)
+        
+        NOTES: From Hogg (1999) Eq.19
+               Assumes omegaK >= 0 (returns None for omegaK < 0)
+               Assumes z1 and z2 have equal dimensions
+        """
+        result = None
+        if self.omegak >= 0.0:
+            DM1 = self.comoving_transverse_distance(z1)
+            DM2 = self.comoving_transverse_distance(z2)
+            result = DM2*np.sqrt(1.0*self.omegak*((DM1/self.HubbleDistance)**2))
+            result += -DM1*np.sqrt(1.0*self.omegak*((DM2/self.HubbleDistance)**2))
+            result *= 1.0/(1.0+z2)
+        return result
+
+
+
     def luminosity_distance(self,z=0.0):
         """
         luminosity_distance(): Returns the luminosity distance
@@ -265,8 +316,8 @@ class cosmology:
         USAGE: luminosity_distance(z)
         
         """
-        da = self.angular_diameter_distance(z)*self._Mpc/(c/self._H100)
-        dL = (c/self._H100)*da*((1.0+z)**2)/self._Mpc
+        da = self.angular_diameter_distance(z)*self.Mpc/(c/self.H0SI)
+        dL = (c/self.H0SI)*da*((1.0+z)**2)/self.Mpc
         return dL
     
 
@@ -278,57 +329,42 @@ class cosmology:
         
         USAGE: comoving_volume(z)
         
-        """
-        dr = self.comoving_distance(z)*self._Mpc/(c/self._H100)
-        x = np.sqrt(np.abs(self._WK))*dr
-        if np.ndim(z) > 0:
-            ratio = np.ones_like(z)*-1.0
-            mask = (x > 0.1)
-            y = x[np.where(mask)]
-            if(self._WK > 0.0):
-                rat = (0.125*(np.exp(2.0*y)-np.exp(-2.0*y))-y/2.0)
-            else:
-                rat = (y/2.0 - np.sin(2.0*y)/4.0)
-            np.place(ratio,mask,rat/((y**3)/3.0))
-            mask = (x <= 0.1)
-            y = x[np.where(mask)]**2
-            if(self._WK < 0.0): 
-                y = -y
-            np.place(ratio,mask,1.0 + y/5.0 + (y**2)*(2.0/105.0))
-        else:  
-            ratio = -1.0
-            if(x > 0.1):
-                if(self._WK > 0.0):
-                    ratio = (0.125*(np.exp(2.0*x)-np.exp(-2.0*x))-x/2.0)
-                else:
-                    ratio = (x/2.0 - np.sin(2.0*x)/4.0)
-                ratio = ratio/((x**3)/3.0)
-            else:
-                y = x**2
-                if(self._WK < 0.0): 
-                    y = -y
-                ratio = 1.0 + y/5.0 + (y**2)*(2.0/105.0)
-        vol = 4.0*np.pi*ratio*(((c/self._H100)*dr/self._Mpc)**3)/3.0
-        return vol
+        Note: From Hogg (1999) Eq.29
 
+        """
+
+        DM = self.comoving_transverse_distance(z)        
+        if self.omegak > 0.0:
+            DMDH = DM/self.HubbleDistance            
+            factor1 = 4.0*Pi*self.HubbleVolume/2.0/self.omegak
+            factor2 = DMDH*np.sqrt(1.0+self.omegak*(DMDH**2))
+            factor3 = -np.arcsinh(np.sqrt(np.fabs(self.omegak))*DMDH)/np.sqrt(np.fabs(self.omegak))
+            result = factor1*(factor2+factor3)
+        elif self.omegak < 0.0:
+            DMDH = DM/self.HubbleDistance            
+            factor1 = 4.0*Pi*self.HubbleVolume/2.0/self.omegak
+            factor2 = DMDH*np.sqrt(1.0+self.omegak*(DMDH**2))
+            factor3 = -np.arcsin(np.sqrt(np.fabs(self.omegak))*DMDH)/np.sqrt(np.fabs(self.omegak))
+            result = factor1*(factor2+factor3)
+        else:
+            result = 4.0*Pi*(DM**3)/3.0
+        return result
+
+    
 
     def dVdz(self,z=0.0):
         """
         dVdz() : Returns the comoving volume element dV/dz
                  at redshift, z, for all sky.
         
-        dV = (c/H100)*(1+z)**2*D_A**2/E(z) dz dOmega
-        
-        f(z) = (c/H100)/E(z)
-        
-        ==> dV/dz(z,all sky) = 4*PI*f(z)*(1+z)**2*D_A**2
-             
+        dV = (c/H0)*(1+z)**2*D_A**2/E(z) dz dOmega
         
         USAGE: dVdz(z)
 
         """
         dA = self.angular_diameter_distance(z)
-        return self.f(z)*(dA**2)*((1.0+z)**2)*4.0*np.pi
+        dV = self.HubbleDistance*(dA**2)*((1.0+z)**2)/self.E(z)
+        return dV*4.0*Pi
     
 
     def band_corrected_distance_modulus(self,z=0.0):
@@ -337,27 +373,13 @@ class cosmology:
                               Distance Modulus (BCDM) at redshift, z.
         
         USAGE: band_corrected_distance_modulus(z)
-            
-        FURTHER INFORMATION:
-        There is no h dependence as we work always in length units of Mpc/h 
-        such that our absolute magnitudes are really Mabs-5logh and no 
-        additional h dependence is needed here to get apparent magnitudes 
-        that are h independent.
-        
-        In Galform versions 2.5.1 onwards the additional -2.5 * log10(1.0+z)
-        is needed to convert from absolute to apparent magnitude as the 
-        definition of absolute magnitude in the Galform code has been changed
-        by a factor of (1+z). With the new definition a galaxy with a SED in 
-        which f_nu is a constant will, quite sensibly, have the same AB 
-        absolute magnitude independent wave band range (including whether it 
-        is rest or observer frame) and independent of redshift. 
-        
-        One way of thinking about this is that while the standard luminosity
-        distance and corresponding distance modulus applies to bolometric 
-        luminosities, for a filter of finite width the flux depends on the
-        band width of the filter in the galaxy's rest frame and it is this 
-        that we are taking into account when defining this "band corrected"
-        distance modulus. 
+
+        NOTE from Galacticus manual:
+        The luminosity computed in this way is that in the galaxy rest
+        frame using a filter blueshifted to the galaxy's redshift. This means
+        that to compute an apparent magnitude you must add not only the
+        distance modulus, but a factor of 2.5 log10(1 + z) to account for
+        compression of photon frequencies.
         """
         dref = 10.0/constants.mega # 10pc in Mpc
         dL = self.luminosity_distance(z)
@@ -374,73 +396,101 @@ class cosmology:
         ZZ = r*np.sin(dec)
         return XX,YY,ZZ
 
+    #
+    # Functions for N-body simulations
+    #
+    def particleMass(self,boxSize,particlesPerSide):
+        numberDensity = (float(particlesPerSide)/float(boxSize))**3
+        return self.criticalDensity*self.omega0/numberDensity
+
+    def boxSize(self,particleMass,particlesPerSide):
+        boxSize = particleMass*(particlesPerSide**3)
+        boxSize /= self.criticalDensity*self.omega0
+        return boxSize**(1.0/3.0)
+    
+    def particlesPerSide(self,boxSize,particleMass):
+        return (self.criticalDensity*self.omega0*(boxSize**3)/particleMass)**(1.0/3.0)
 
 
 
 
+class WMAP(Cosmology):
+    
+    def __init__(self,year,h_independent=True,radiation=False,zmax=20.0,nzmax=10000):
+        classname = self.__class__.__name__
+        funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name
+        self.year = year        
+        if self.year == 1:
+            omega0 = 0.25
+            lambda0 = 0.75
+            omegab = 0.045
+            h0 = 0.73
+            sigma8 = 0.9
+            ns = 1.0
+        elif year == 3:
+            pass
+        elif year == 5:
+            pass
+        elif year == 7:
+            omega0 = 0.272
+            lambda0 = 0.728
+            omegab = 0.045
+            h0 = 0.702
+            sigma8 = 0.807
+            ns = 0.961
+        elif year == 9:
+            pass
+        else:
+            print("*** ERROR! "+classname+"(): year not recognised!")
+            print("           Select one of the following years: 1,3,5,7,9.")                        
+        super(WMAP, self).__init__(omega0=omega0,lambda0=lambda0,omegab=omegab,h0=h0,\
+                                       sigma8=sigma8,ns=ns,radiation=radiation,\
+                                       zmax=zmax,nzmax=nzmax,h_independent=h_independent)
+        return
 
-# Set cosmology for Millennium simulation
-def Millennium(radiation=False):    
-    return cosmology(omega0=0.25,lambda0=0.75,omegab=0.045,h0=0.73,\
-                 sigma8=0.9,ns=1.0,radiation=radiation)
 
 
-def WMAP(year=7,radiation=False):
-    if year == 1:
-        omega0 = 0.25
-        lambda0 = 0.75
-        omegab = 0.045
-        h0 = 0.73
-        sigma8 = 0.9
-        ns = 1.0
-    elif year == 3:
-        pass
-    elif year == 5:
-        pass
-    elif year == 7:
-        omega0 = 0.272
-        lambda0 = 0.728
-        omegab = 0.045
-        h0 = 0.702
-        sigma8 = 0.807
-        ns = 0.961
-    elif year == 9:
-        pass
+def adjustHubble(values,hIn,hOut,datatype,verbose=False):
+    funcname = sys._getframe().f_code.co_name    
+    # Get type of data to convert
+    if fnmatch.fnmatch(datatype.lower(),"mag*"):
+        dtype = "magnitude"
+        result = values - 5.0*np.log10(hOut/hIn)
+    elif fnmatch.fnmatch(datatype.lower(),"lum*"):
+        dtype = "luminosity"
+        result = values * ((hOut/hIn)**2)
+    elif fnmatch.fnmatch(datatype.lower(),"dis*"):
+        dtype = "distance"
+        result = values * (hIn/hOut)
+    elif fnmatch.fnmatch(datatype.lower(),"vol*"):
+        dtype = "volume"
+        result = values * ((hIn/hOut)**3)
+    elif fnmatch.fnmatch(datatype.lower(),"mass*"):
+        dtype = "mass"
+        result = values * (hIn/hOut)
+    elif fnmatch.fnmatch(datatype.lower(),"den*"):
+        dtype = "density"
+        result = values * ((hOut/hIn)**3)
     else:
-        print "*** ERROR: WMAP(): please select one of the following years: 1,3,5,7,9."
-        return None
-    return cosmology(omega0=omega0,lambda0=lambda0,omegab=omegab,h0=h0,\
-                     sigma8=sigma8,ns=ns,radiation=radiation)
+        availableTypes = ["magnitude","luminosity","distance","volume","mass","density"]
+        report = funcname+"(): Specified type not recognised!\n"
+        report = report = "      Available datatypes are: "+", ".join(availableTypes)
+        raise ValueError(report)
+    if verbose:
+        print(funcname+"(): Converted "+dtype+" from h="+str(hIn)+" to h="+str(hOut))    
+    return result
+        
 
 
 
-def hod(bins,haloid,mhalo,mask=None):
-    from utilities_statistics import outside_range
-    # If no additional mask supplied, assume using
-    # all galaxies
-    if mask is None:
-        mask = np.ones(len(haloid),bool)
-    # Find location of unique halos in arrayof IDs
-    id,index,inv = np.unique(haloid[np.where(mask)],\
-                             return_index=True,return_inverse=True)
-    # Count number of galaxies in each halo
-    ngals = np.bincount(inv)
-    # Extract masses of halos
-    masses = mhalo[np.where(mask)]
-    mass = masses[index]
-    # Only use halos with masses inside range spanned
-    # by mass bins
-    mlow = bins[0]
-    dm = bins[1] - bins[0]
-    mupp = bins[-1] + dm
-    hod = np.zeros_like(bins)
-    err = np.zeros_like(bins)
-    binmask = outside_range(mass,low=mlow,upp=mupp)
-    ibins = np.digitize(mass,bins)
-    np.place(ibins,binmask,-999)
-    # Calculate halo occupation distribution
-    for i in range(len(bins)):
-        hod[i] = np.mean(ngals[np.where(ibins==i)])
-        err[i] = np.std(ngals[np.where(ibins==i)])
-    return hod,err
 
+
+
+
+
+
+    
+        
+
+
+    
