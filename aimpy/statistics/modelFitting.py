@@ -32,9 +32,12 @@ class chiSquared(object):
             result /= self.obsYErr**2
         return np.sum(result)
 
-    def getChiSquared(self,modelX,modelY,reduced=True,**kwargs):
+    def getChiSquared(self,modelX,modelY,reduced=True,dof=None,**kwargs):
         model = interp1d(modelX,modelY,**kwargs)
         result = self.chiSquared(model(self.obsX))
         if reduced:
-            result /= float(len(self.obsY))*2-2.0
+            if dof is not None:
+                result /= flaot(dof)
+            else:
+                result /= float(len(self.obsY))*2-2.0
         return result
