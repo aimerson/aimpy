@@ -110,7 +110,7 @@ class HDF5(object):
             thisdir.visititems(_append_item)
         else:
             ls = thisdir.keys()
-        return ls
+        return list(map(str,ls))
 
     ##############################################################################
     # DATASETS
@@ -162,11 +162,11 @@ class HDF5(object):
         return
 
     def lsDatasets(self,hdfdir):
-        objs = self.lsdir(hdfdir,recursive=False)             
+        objs = self.lsGroups(hdfdir,recursive=False)             
         dsets = []
         def _is_dataset(obj):
             return isinstance(self.fileObj[hdfdir+"/"+obj],h5py.Dataset)        
-        return filter(_is_dataset,objs)
+        return list(map(str,filter(_is_dataset,objs)))
 
 
     def readDatasets(self,hdfdir,recursive=False,required=None,exit_if_missing=True):
@@ -189,14 +189,14 @@ class HDF5(object):
 
         """
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name        
-        data = {}
         if isinstance(self.fileObj[hdfdir],h5py.Dataset):
             # Read single dataset
             if hdfdir not in self.fileObj:
                 raise KeyError(funcname+"(): "+hdfdir+" not found in HDF5 file!")        
             name = hdfdir.split("/")[-1]
-            data[str(name)] = np.array(self.fileObj[hdfdir])
+            data = np.array(self.fileObj[hdfdir])
         elif isinstance(self.fileObj[hdfdir],h5py.Group):
+            data = {}
             # Read datasets in group
             # i) List datasets (recursively if specified)
             if recursive:
