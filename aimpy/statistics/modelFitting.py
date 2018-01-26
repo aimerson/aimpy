@@ -8,7 +8,7 @@ class chiSquared(object):
 
     def __init__(self,obsX,obsY,obsYErr=None):
         # Store observations and error
-        self.obsX = np.copy(obsX))
+        self.obsX = np.copy(obsX)
         self.obsY = np.copy(obsY)
         assert(len(self.obsX)==len(self.obsY))
         self.obsYErr = None
