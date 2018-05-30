@@ -3,6 +3,18 @@
 import sys
 import h5py
 import numpy as np
+import fnmatch
+
+def flattenNestedList(l):
+    return [item for sublist in l for item in sublist]
+
+def findMatchingItems(allItems,itemsToFind):
+    found = [fnmatch.filter(allItems,item) for item in itemsToFind]
+    return list(set(flattenNestedList(found)))
+
+def findMissingItems(allItems,itemsToSearch):
+    missing = [len(fnmatch.filter(allItems,item))==0 for item in itemsToSearch]
+    return [item for item, miss in zip(itemsToSearch, missing) if miss]
 
 def readonlyWrapper(func):
     def wrapper(self,*args,**kwargs):               
@@ -15,6 +27,17 @@ def readonlyWrapper(func):
 class HDF5(object):
     
     def __init__(self,*args,**kwargs):
+        """ HDF5 Class for reading/writing HDF5 files
+
+        USAGE: OBJ = HDF5(filename,ioStatus,verbose=<verbose>)
+
+        Inputs: filename -- Path to HDF5 file.  
+                ioStatus -- Read ('r'), write ('w') or append ('a') to file.  
+                verbose -- Print extra information (default value = False).
+
+        Returns HDF5 class object.
+        """
+
         classname = self.__class__.__name__
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name
 
@@ -37,6 +60,18 @@ class HDF5(object):
     def close(self):
         self.fileObj.close()
         return
+
+    def lsObjects(self,hdfdir,recursive=False):
+        ls = []
+        thisdir = self.fileObj[hdfdir]
+        if recursive:
+            def _append_item(name, obj):
+                if isinstance(obj, h5py.Dataset):
+                    ls.append(name)
+            thisdir.visititems(_append_item)
+        else:
+            ls = thisdir.keys()
+        return list(map(str,ls))
 
     ##############################################################################
     # GROUPS
@@ -110,6 +145,7 @@ class HDF5(object):
             thisdir.visititems(_append_item)
         else:
             ls = thisdir.keys()
+            ls = [obj for obj in ls if isinstance(thisdir[obj], h5py.Group)]
         return list(map(str,ls))
 
     ##############################################################################
@@ -130,7 +166,8 @@ class HDF5(object):
         if name in g.keys():
             write_key = False
             if append:
-                value = np.append(np.copy(g[name]),value)
+                shape = tuple(list(map(int,",".join(map(str,list(maxshape))).replace("None",'-1').split(","))))
+                value = np.append(np.copy(g[name]),value).reshape(shape)
                 del g[name]
                 write_key = True
             if overwrite:
@@ -155,19 +192,44 @@ class HDF5(object):
             self.mkGroup(hdfdir)
         g = self.fileObj[hdfdir]
         # Write data to group
-        for n in data.dtype.names:
-            self.add_dataset(hdfdir,n,data[n],append=append,overwrite=overwrite,\
-                                 maxshape=maxshape,chunks=chunks,compression=compression,\
-                                 compression_opts=compression_opts,**kwargs)
+        dummy = [ self.addDataset(hdfdir,n,data[n],append=append,overwrite=overwrite,\
+                                      maxshape=maxshape,chunks=chunks,compression=compression,\
+                                      compression_opts=compression_opts,**kwargs) \
+                      for n in data.dtype.names ]
+        del dummy
+        return
+
+    @readonlyWrapper
+    def rmDataset(self,hdfdir,dataset):
+        g = self.fileObj[hdfdir]
+        if dataset in g.keys():
+            del g[dataset]
         return
 
     def lsDatasets(self,hdfdir):
-        objs = self.lsGroups(hdfdir,recursive=False)             
+        objs = self.lsObjects(hdfdir,recursive=False)             
         dsets = []
         def _is_dataset(obj):
             return isinstance(self.fileObj[hdfdir+"/"+obj],h5py.Dataset)        
         return list(map(str,filter(_is_dataset,objs)))
-
+    
+    def findMatchingDatasets(self,hdfdir,searchItems,recursive=False,exit_if_missing=True):
+        funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name        
+        if recursive:
+            objs = self.lsGroup(hdfdir,recursive=recursive)                     
+        else:
+            objs = self.lsDatasets(hdfdir)           
+        matches = findMatchingItems(objs,searchItems)        
+        if exit_if_missing:
+            missing = findMissingItems(matches,searchItems)
+            #missing = list(set(matches).difference(objs))
+            if len(missing) > 0:
+                dashed = "-"*10
+                err = dashed+"\nERROR! "+funcname+"(): No matches found for:"+\
+                    hdfdir+":\n     "+"\n     ".join(missing)+"\n"+dashed
+                print(err)
+                raise KeyError(funcname+"(): Some required keys cannot be found in '"+hdfdir+"'!")
+        return matches
 
     def readDatasets(self,hdfdir,recursive=False,required=None,exit_if_missing=True):
         """
@@ -189,14 +251,14 @@ class HDF5(object):
 
         """
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name        
+        data = {}
         if isinstance(self.fileObj[hdfdir],h5py.Dataset):
             # Read single dataset
             if hdfdir not in self.fileObj:
                 raise KeyError(funcname+"(): "+hdfdir+" not found in HDF5 file!")        
             name = hdfdir.split("/")[-1]
-            data = np.array(self.fileObj[hdfdir])
+            data[str(name)] = np.array(self.fileObj[hdfdir])
         elif isinstance(self.fileObj[hdfdir],h5py.Group):
-            data = {}
             # Read datasets in group
             # i) List datasets (recursively if specified)
             if recursive:
@@ -204,14 +266,8 @@ class HDF5(object):
             else:
                 objs = self.lsDatasets(hdfdir)   
             if required is not None:                
-                missing = list(set(required).difference(objs))
-                if len(missing) > 0:
-                    dashed = "-"*10
-                    err = dashed+"\n"+funcname+"(): Following keys are missing from "+\
-                        hdfdir+":\n     "+"\n     ".join(missing)+"\n"+dashed
-                    print(err)
-                    raise KeyError(funcname+"(): Some required keys cannot be found in '"+hdfdir+"'!")
-                objs = list(set(objs).intersection(required))                
+                objs = self.findMatchingDatasets(hdfdir,required,recursive=recursive,\
+                                                    exit_if_missing=exit_if_missing)
             # ii) Store in dictionary
             def _store_dataset(obj):
                 data[str(obj)] = np.array(self.fileObj[hdfdir+"/"+obj])
