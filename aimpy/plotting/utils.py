@@ -1,6 +1,7 @@
 #! /usr/bin/env python
 
 import sys,fnmatch
+import math,re
 import numpy as np
 import matplotlib
 from scipy.stats import *
@@ -21,15 +22,28 @@ from pylab import *
 import matplotlib.pyplot as plt
 from decimal import *
 
+#mpl.style.use('classic')
 mpl.rcParams['font.family'] = 'serif'
+try:
+    mpl.rcParams['xtick.top'] = True
+except KeyError:
+    pass
+try:
+    mpl.rcParams['ytick.right'] = True
+except KeyError:
+    pass    
+mpl.rcParams['errorbar.capsize'] = 3
 mpl.rcParams['legend.numpoints'] = 1
-#mpl.rcParams['legend.scatterpoints'] = 1
+mpl.rcParams['legend.fontsize'] = 'large'
+mpl.rcParams['mathtext.fontset'] = 'cm'
+mpl.rcParams['mathtext.rm'] = 'serif'
+mpl.rcParams['xtick.direction'] = 'in'
+mpl.rcParams['ytick.direction'] = 'in'
 mpl.rcParams['legend.fontsize'] = 'small'
 mpl.rcParams['legend.markerscale'] = 1
 mpl.rcParams['axes.labelsize'] = 12.0
 mpl.rcParams['xtick.labelsize'] = 12.0
 mpl.rcParams['ytick.labelsize'] = 12.0
-
 
 ####################################################################################
 # AXIS FUNCTIONS
@@ -69,6 +83,66 @@ def minor_ticks(axObj):
     return
 
 
+class axisGridArray(object):
+    def __init__(self,nrow,ncol):
+        self.nrow = nrow
+        self.ncol = ncol
+        self.ntot = self.nrow*self.ncol
+        self.axisNumbers = np.arange(self.ntot).reshape(self.nrow,self.ncol)
+        self.yEdges = self.axisNumbers[:,0]
+        self.xEdges = self.axisNumbers[-1,:]
+        return
+    
+    def getRow(self,i):
+        return self.axisNumbers[i,:]
+
+    def getColumn(self,i):
+        return self.axisNumbers[:,i]
+
+    def yEdge(self,iplot):
+        if type(iplot) == int or type(iplot) == str:
+            iax = int(list(str(iplot))[-1])
+        else:
+            iax = int(iplot[-1])
+        return iax-1 in self.yEdges
+
+    def xEdge(self,iplot):
+        if type(iplot) == int or type(iplot) == str:
+            iax = int(list(str(iplot))[-1])
+        else:
+            iax = int(iplot[-1])
+        return iax-1 in self.xEdges
+        
+
+
+
+def yEdgeAxes(iplot):
+    if type(iplot) == int:
+        iplot = str(iplot)
+    if type(iplot) == str:
+        nrow = int(list(iplot)[0])
+        ncol = int(list(iplot)[1])    
+    else:    
+        nrow = int(iplot[0])
+        ncol = int(iplot[1])
+    ntot = nrow*ncol
+    i = np.arange(ntot).reshape(nrow,ncol)
+    return i[:,0]
+
+def xEdgeAxes(iplot):
+    if type(iplot) == int:
+        iplot = str(iplot)
+    if type(iplot) == str:
+        nrow = int(list(iplot)[0])
+        ncol = int(list(iplot)[1])    
+    else:    
+        nrow = int(iplot[0])
+        ncol = int(iplot[1])
+    ntot = nrow*ncol
+    i = np.arange(ntot).reshape(nrow,ncol)
+    return i[-1,:]
+
+
 def get_position(ax,xfrac,yfrac):
     xlims = ax.get_xlim()
     ylims = ax.get_ylim()
@@ -91,7 +165,8 @@ def colour_array(n=1,i=None,cmap="jet"):
     if n == 1:
         return "k"
     else:
-        colarr = np.arange(float(n))/float(n)
+        colarr = np.linspace(0.0,1.0,n)
+        #colarr = np.arange(float(n))/float(n)
         colarr = cm(colarr)
         if i is not None:
             if i in range(n):
@@ -154,41 +229,123 @@ def make_colourmap(seq):
 def print_rounded_value(x,dx):
     return str(Decimal(str(x)).quantize(Decimal(str(dx))))
 
-def sigfig(x,n,latex=True):
-    if n ==0:
+def frexp10(x):
+    exp = int(math.log10(x)) 
+    return x / 10**exp, exp
+
+def sigfig(number,sigfig,latex=True):
+    if sigfig == 0:
         return 0
-    fmt = "%."+str(n-1)+"E"
-    s = fmt % x
-    s = str(float(s))
-    if "e" in s:
-        s = s.split("e")
-        m = n - len(s[0].replace(".","").replace("-","").lstrip("0"))
-        s[0] = s[0].ljust(len(s[0])+m,"0")
-        if "." in s[0]:
-            if len(s[0].split(".")[1].strip("0")) == 0 and len(s[0].split(".")[0]) >= n:
-                s[0] = s[0].split(".")[0]
-        if latex:
-                s[1] = "$\\times 10^{"+str(int(s[1]))+"}$"
+    # Check if number is zero
+    if number == 0:
+        if sigfig == 1:
+            return "0"
         else:
-            s[1] = "e" + s[1]
-        s = "".join(s)
+            return "0."+"0"*(sigfig-1)
+    number = str(number)
+    # Split mantissa and exponent
+    if "e" in number.lower():
+        m = number.split("e")[0]
+        e = number.split("e")[1]
     else:
-        m = n - len(s.replace(".","").replace("-","").lstrip("0"))
-        s = s.ljust(len(s)+m,"0")
-        if "." in s:
-            if len(s.split(".")[1].strip("0")) == 0 and len(s.split(".")[0]) >= n:
-                s = s.split(".")[0]
-    return s
+        m = number
+        e = None
+    # Check if negative
+    neg = re.search('-',str(m))
+    if neg is None:
+        neg = False
+    else:
+        neg = True
+        m = m.replace("-","")
+    # Trim mantissa
+    l = list(m)
+    sigfigs = [i for i, x in enumerate(l) if fnmatch.fnmatch(x,'[1-9]')]
+    if sigfig > len(sigfigs):
+        lsf= sigfigs[-1]
+    else:
+        lsf= sigfigs[sigfig-1]
+    if lsf < len(l)-1:
+        nd = lsf+1
+        if nd < len(l):
+            if l[nd] == ".":
+                nd += 1
+            if int(l[nd]) >= 5:
+                if int(l[lsf]) == 9:
+                    pd = lsf
+                    while int(l[pd])== 9:
+                        l[pd] = "0"
+                        pd -= 1
+                        if l[pd] == '.':
+                            pd -= 1
+                    l[pd] = str(int(l[pd])+1)
+                else:
+                    l[lsf] = str(int(l[lsf])+1)
+    if "." in l:
+        dp = l.index(".")
+        if dp > lsf:
+            l = l[:dp]
+        else:
+            l = l[:lsf+1]
+    m = "".join(l[:lsf+1])[::-1].zfill(len(l))[::-1]
+    # Add minus if negative
+    if neg:
+        m ="-"+m
+    # Add on exponent if present
+    if e is None:
+        number = m
+    else:
+        number = m+"e"+e
+        if latex:
+            number = number.replace("e","\\times 10^{")+"}"
+    return number
+
+
+
+
 
 ####################################################################################
 # LEGEND FUNCTIONS
 ####################################################################################
 
-def Legend(ax,ec='none',fc='none',fontcolor="k",**kwargs):
+def Legend(ax,ec='none',fc='none',fontcolor="k",alpha=1.0,**kwargs):
     leg = ax.legend(**kwargs)
     frame = leg.get_frame()
-    frame.set_edgecolor(ec)
+    frame.set_edgecolor(ec)    
     frame.set_facecolor(fc)
+    frame.set_alpha(alpha)
     for text in leg.get_texts():
         text.set_color(fontcolor)
     return
+
+
+####################################################################################
+# PLOTTING FUNCTIONS
+####################################################################################
+
+
+def ImageStats2D(ax,X,Y,Xbins,Ybins,Z=None,statistic="count",\
+                           weights=None,func=None,**kwargs):
+    from ..statistics.utils import binstats2D
+    """                                                                                                                                                                                                                     
+    statistic can be: mean,median,sum,product,std,var,percentile,avg,max,min,mode                                                                                                                                           
+    NB 'avg' is weighted average                                                                                                                                                                                            
+    """
+    # Calculate statistic in 2-dimension bins                                                                                                                                                                               
+    data,xedges,yedges,numb = binstats2D(X,Y,Xbins,Ybins=Ybins,Z=Z,\
+                                             statistic=statistic,weights=weights)
+    if func is not None:
+        data = func(data)
+    if np.any(np.isinf(data)):
+        np.place(data,np.isinf(data),np.NaN)
+    extent = [xedges[0],xedges[-1],yedges[0],yedges[-1]]
+    # Set default preferences for selected keyword arguments                                                                                                                                                                
+    if "extent" not in kwargs.keys():
+        kwargs["extent"] = extent
+    if "interpolation" not in kwargs.keys():
+        kwargs["interpolation"] = "nearest"
+    if "aspect" not in kwargs.keys():
+        kwargs["aspect"] = "auto"
+    if "origin" not in kwargs.keys():
+        kwargs["origin"] = "lower"
+    axim = ax.imshow(np.transpose(data),**kwargs)
+    return axim
