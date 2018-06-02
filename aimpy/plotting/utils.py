@@ -8,12 +8,10 @@ from scipy.stats import *
 
 def X11_forwarding():
     import os
-    try:
-        l = os.environ["DISPLAY"]
-    except KeyError:
-        return False
-    else:
+    if "DISPLAY" in os.environ.keys():
         return True
+    return False
+
 
 if not X11_forwarding():
     matplotlib.use('Agg')
