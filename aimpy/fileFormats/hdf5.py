@@ -225,8 +225,8 @@ class HDF5(object):
             #missing = list(set(matches).difference(objs))
             if len(missing) > 0:
                 dashed = "-"*10
-                err = dashed+"\nERROR! "+funcname+"(): No matches found for:"+\
-                    hdfdir+":\n     "+"\n     ".join(missing)+"\n"+dashed
+                err = dashed+"\nERROR! "+funcname+"(): No matches found in "+hdfdir+" for:"+\
+                    "\n     "+"\n     ".join(missing)+"\n"+dashed
                 print(err)
                 raise KeyError(funcname+"(): Some required keys cannot be found in '"+hdfdir+"'!")
         return matches
