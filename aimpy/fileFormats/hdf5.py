@@ -185,6 +185,45 @@ class HDF5(object):
     ##############################################################################
     # DATASETS
     ##############################################################################
+
+
+
+    def writeDataset(self,hdfdir,name,data,maxshape=tuple([None]),overwrite=False,\
+                         chunks=True,compression="gzip",compression_opts=6,**kwargs):
+        funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name
+        # Select HDF5 group
+        if hdfdir not in self.fileObj.keys():
+            self.mkGroup(hdfdir)
+        g = self.fileObj[hdfdir]
+        # Check if dataset exists
+        if self.datasetExists(hdfdir,name,exit_if_missing=False):
+            if not overwrite:
+                return
+            else:
+                del g[name]
+        # Write dataset
+        dset = g.create_dataset(name,data=data,maxshape=maxshape,\
+                                    chunks=chunks,compression=compression,\
+                                    compression_opts=compression_opts,**kwargs)
+        return
+
+
+    def appendDataset(self,hdfdir,name,data,axis=0,maxshape=tuple([None]),chunks=True,\
+                          compression="gzip",compression_opts=6,**kwargs):
+        funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name
+        # Check if dataset exists (write dataset fif it does not exist)
+        if not self.datasetExists(hdfdir,name,exit_if_missing=False):        
+            self.writeDataset(hdfdir,name,data,maxshape=maxshape,chunks=chunks,\
+                          compression=compression,compression_opts=compression_opts,\
+                                  **kwargs)
+            return
+        # Select dataset
+        dset = self.fileObj[hdfdir+"/"+name]
+        n = dset.shape[axis]
+        dset.resize(dset.shape[axis]+len(data),axis=axis) 
+        dset[n:] = np.copy(data)
+        return
+    
     
     @readonlyWrapper
     def addDataset(self,hdfdir,name,data,append=False,overwrite=False,\
