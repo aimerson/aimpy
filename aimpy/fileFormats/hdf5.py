@@ -187,7 +187,7 @@ class HDF5(object):
     ##############################################################################
 
 
-
+    @readonlyWrapper
     def writeDataset(self,hdfdir,name,data,maxshape=tuple([None]),overwrite=False,\
                          chunks=True,compression="gzip",compression_opts=6,**kwargs):
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name
@@ -207,7 +207,7 @@ class HDF5(object):
                                     compression_opts=compression_opts,**kwargs)
         return
 
-
+    @readonlyWrapper
     def appendDataset(self,hdfdir,name,data,axis=0,maxshape=tuple([None]),chunks=True,\
                           compression="gzip",compression_opts=6,**kwargs):
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name
@@ -218,43 +218,37 @@ class HDF5(object):
                                   **kwargs)
             return
         # Select dataset
+        if axis != 0:
+            raise ValueError(funcname+"(): Currently only implemented for axis=0")
         dset = self.fileObj[hdfdir+"/"+name]
         n = dset.shape[axis]
-        dset.resize(dset.shape[axis]+len(data),axis=axis) 
-        dset[n:] = np.copy(data)
+        dset.resize(dset.shape[axis]+data.shape[axis],axis=axis) 
+        i = np.argwhere(dset[:]==0.0)
+        dset[n:] = np.copy(data)    
         return
-    
-    
+        
     @readonlyWrapper
     def addDataset(self,hdfdir,name,data,append=False,overwrite=False,\
                         maxshape=tuple([None]),chunks=True,compression="gzip",\
                         compression_opts=6,**kwargs):
-        funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name
+        funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name        
         # Select HDF5 group
         if hdfdir not in self.fileObj.keys():
             self.mkGroup(hdfdir)
-        g = self.fileObj[hdfdir]
-        # Write data to group
-        value = np.copy(data)
-        if name in g.keys():
-            write_key = False
-            if append:
-                shape = tuple(list(map(int,",".join(map(str,list(maxshape))).replace("None",'-1').split(","))))
-                value = np.append(np.copy(g[name]),value).reshape(shape)
-                del g[name]
-                write_key = True
-            if overwrite:
-                del g[name]
-                write_key = True
+        # Write dataset
+        if append:
+            # i) Append to existing dataset
+            self.appendDataset(hdfdir,name,data,axis=0,maxshape=maxshape,chunks=chunks,\
+                                   compression=compression,compression_opts=compression_opts,\
+                                   **kwargs)
         else:
-            write_key = True
-        if write_key:                
-            dset = g.create_dataset(name,data=value,maxshape=maxshape,\
-                                        chunks=chunks,compression=compression,\
-                                        compression_opts=compression_opts,**kwargs)
-        del value            
+            # ii) Write or over-write existing dataset
+            self.writeDataset(hdfdir,name,data,maxshape=maxshape,overwrite=overwrite,\
+                             chunks=chunks,compression=compression,compression_opts=compression_opts,\
+                                  **kwargs)
         return
 
+            
     @readonlyWrapper
     def addDatasets(self,hdfdir,data,append=False,overwrite=False,\
                         maxshape=tuple([None]),chunks=True,compression="gzip",\
@@ -263,7 +257,6 @@ class HDF5(object):
         # Select HDF5 group
         if hdfdir not in self.fileObj.keys():
             self.mkGroup(hdfdir)
-        g = self.fileObj[hdfdir]
         # Write data to group
         dummy = [ self.addDataset(hdfdir,n,data[n],append=append,overwrite=overwrite,\
                                       maxshape=maxshape,chunks=chunks,compression=compression,\
