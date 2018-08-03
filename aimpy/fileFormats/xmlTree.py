@@ -135,7 +135,15 @@ class xmlTree(object):
             if key in ELEM.attrib.keys():
                 ELEM.attrib[key] = attrib[key]
         return
-        
+
+    def removeElement(self,path):        
+        elementName = path.split("/")[-1]
+        parentPath = path.replace("/"+elementName,"")
+        PARENT = self.getElement(parentPath)
+        ELEM = self.getElement(path)
+        PARENT.remove(ELEM)
+        return
+    
     def writeToFile(self,outFile,format=True):
         self.tree.write(outFile)
         if format:
