@@ -114,6 +114,8 @@ class xmlTree(object):
                     parentPath = "/"
                 parentName = path.split("/")[-1]
                 self.createElement(parentPath,parentName)
+            else:
+                raise ValueError("Parent path does not exist!")
         PARENT = self.getElement(path)
         ET.SubElement(PARENT,name,attrib=attrib)
         self.map.append(path+"/"+name)
