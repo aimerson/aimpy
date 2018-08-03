@@ -104,16 +104,16 @@ class xmlTree(object):
                 OBJ = OBJ.find(dir)
         return OBJ
 
-    def createElement(self,path,name,attrib={},buildParents=False):
+    def createElement(self,path,name,attrib={},createParents=False):
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name        
         matches = self.matchPath(path)
         if len(matches) == 0:
-            if buildParents:          
+            if createParents:          
                 parentPath = "/".join(path.split("/")[:-1])
                 if parentPath == "":
                     parentPath = "/"
                 parentName = path.split("/")[-1]
-                self.createElement(parentPath,parentName,buildParents=buildParents)
+                self.createElement(parentPath,parentName,createParents=createParents)
             else:
                 raise ValueError("Parent path does not exist!")
         PARENT = self.getElement(path)
@@ -121,7 +121,7 @@ class xmlTree(object):
         self.map.append(path+"/"+name)
         return
 
-    def updateElement(self,path,attrib={},buildParents=False):
+    def updateElement(self,path,attrib={},createParents=False):
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name        
         matches = self.matchPath(path)        
         if len(matches) == 0:
@@ -129,7 +129,7 @@ class xmlTree(object):
             if parentPath == "":
                 parentPath = "/"
             parentName = path.split("/")[-1]
-            self.createElement(parentPath,parentName,buildParents=buildParents)
+            self.createElement(parentPath,parentName,createParents=createParents)
         ELEM = self.getElement(path)
         for key in attrib.keys():
             if key in ELEM.attrib.keys():
