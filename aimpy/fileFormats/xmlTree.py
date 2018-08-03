@@ -81,6 +81,8 @@ class xmlTree(object):
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name        
         OBJ = self.getElement(path)
         value = None
+        if OBJ is None:
+            return value
         if attrib is None:
             return OBJ.attrib
         if attrib in OBJ.attrib.keys():
