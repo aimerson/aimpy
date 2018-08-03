@@ -104,11 +104,11 @@ class xmlTree(object):
                 OBJ = OBJ.find(dir)
         return OBJ
 
-    def createElement(self,path,name,attrib={},buildIfMissing=True):
+    def createElement(self,path,name,attrib={},buildParents=True):
         funcname = self.__class__.__name__+"."+sys._getframe().f_code.co_name        
         matches = self.matchPath(path)
         if len(matches) == 0:
-            if buildIfMissing:          
+            if buildParents:          
                 parentPath = "/".join(path.split("/")[:-1])
                 if parentPath == "":
                     parentPath = "/"
