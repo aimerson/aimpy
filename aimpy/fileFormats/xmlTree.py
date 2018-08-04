@@ -66,6 +66,11 @@ class xmlTree(object):
         matches = fnmatch.filter(self.map,path)
         self.reportMultipleMatches(matches)
         return matches
+
+    def elementExists(self,path):
+        matches = self.matchPath(path)
+        return len(matches)==1
+    
     
     def reportMultipleMatches(self,matches):
         if len(matches) > 1:
@@ -142,6 +147,7 @@ class xmlTree(object):
         PARENT = self.getElement(parentPath)
         ELEM = self.getElement(path)
         PARENT.remove(ELEM)
+        self.map.remove(path)
         return
     
     def writeToFile(self,outFile,format=True):
