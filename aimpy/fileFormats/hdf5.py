@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-import sys
+import sys,os
 import h5py
 import numpy as np
 import fnmatch
@@ -167,20 +167,20 @@ class HDF5(object):
         fileObj.copy(srcdir,group_id,name=dstdir)
         fileObj.close()   
         return
-
     
     def lsGroups(self,hdfdir,recursive=False):
         ls = []
-        thisdir = self.fileObj[hdfdir]        
-        if recursive:
-            def _append_item(name, obj):
-                if isinstance(obj, h5py.Dataset):
-                    ls.append(name)
-            thisdir.visititems(_append_item)
-        else:
-            ls = thisdir.keys()
-            ls = [obj for obj in ls if isinstance(thisdir[obj], h5py.Group)]
-        return list(map(str,ls))
+        thisdir = self.fileObj[hdfdir]
+        for obj in thisdir.keys():
+            if isinstance(thisdir[obj],h5py.Group):
+                if recursive:
+                    ls.append(hdfdir+str(obj))
+                    path = hdfdir+str(obj)+"/"
+                    ls = ls + self.lsGroups(path,recursive=recursive)
+                else:
+                    ls.append(str(obj))
+        return ls
+
 
     ##############################################################################
     # DATASETS
@@ -296,7 +296,6 @@ class HDF5(object):
                 print(err)
                 raise KeyError(funcname+"(): Some required keys cannot be found in '"+hdfdir+"'!")
         return matches
-
     
     def datasetExists(self,hdfdir,name,exit_if_missing=True):
         exists = name in self.lsDatasets(hdfdir)
@@ -434,3 +433,6 @@ class HDF5(object):
             if att in attrib.keys():
                 attrib.__delitem__(att)
         return
+
+
+
