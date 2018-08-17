@@ -481,7 +481,14 @@ def adjustHubble(values,hIn,hOut,datatype,verbose=False):
     return result
         
 
+def wavelengthToRedshift(obsv,emit):
+    return (obsv/emit) - 1.0
 
+def redshiftToWavelength(z,emit):
+    return (1.0+z)*emit
+
+def MpcToCM(r):
+    return r*Parsec*mega*100.0
 
 
 
