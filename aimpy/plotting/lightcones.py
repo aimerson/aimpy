@@ -5,7 +5,6 @@ import numpy as np
 from .utils import *
 from ..constants import Pi
 
-
 from matplotlib.projections import PolarAxes
 from matplotlib.transforms import Affine2D
 import mpl_toolkits.axisartist.floating_axes as floating_axes
