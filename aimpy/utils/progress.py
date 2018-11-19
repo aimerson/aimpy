@@ -76,7 +76,7 @@ def time_string(seconds):
     '0s'
     """
     if seconds < 0:
-	return "--"
+        return "--"
     units = [(60*60*24, "d"), (60*60, "h"), (60, "m"), (1, "s")]
     parts = []
     for i in range(len(units)):

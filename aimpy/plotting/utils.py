@@ -15,7 +15,7 @@ def X11_forwarding():
 
 if not X11_forwarding():
     matplotlib.use('Agg')
-    print "WARNING! No X-window detected! Adopting 'Agg' backend..."
+    print("WARNING! No X-window detected! Adopting 'Agg' backend...")
 from pylab import *
 import matplotlib.pyplot as plt
 from decimal import *
@@ -158,7 +158,7 @@ def get_position(ax,xfrac,yfrac):
 def colour_array(n=1,i=None,cmap="jet"):
     cm = plt.get_cmap(cmap)
     if cm is None:
-        print "*** ERROR: colour_array(): colour map ",cmap," not found!"
+        raise ValueError("Colourm map "+str(cmap)+" not found!")
         sys.exit(3)
     if n == 1:
         return "k"
