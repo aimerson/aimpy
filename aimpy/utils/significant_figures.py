@@ -38,7 +38,19 @@ class SigFig(object):
         if loc is None:
             loc = len(search)
         return loc
-            
+
+
+    @classmethod
+    def tidyup(cls,search,loc):
+        if "." in search:
+            pnt = search.index(".")
+            if pnt > loc:
+                search = search[:pnt]
+            else:
+                search = search[:loc+1]
+        return search
+        
+
     @classmethod
     def modify_number(cls,num,loc):
         search = list(copy.copy(str(num)))
@@ -49,15 +61,11 @@ class SigFig(object):
             next += 1
         if int(search[next]) > 5:
             search[loc] = str(int(search[loc])+1)
-        cut = False
         for i in range(loc+1,len(search)):            
             if search[i].isdigit():
                 search[i] = "0"
-            if search[i] == ".":
-                cut = True
+        search = cls.tidyup(search,loc)
         result = "".join(search)
-        if cut:
-            result = result.split(".")[0]
         return result
 
     @classmethod
