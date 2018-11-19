@@ -49,10 +49,16 @@ class SigFig(object):
             next += 1
         if int(search[next]) > 5:
             search[loc] = str(int(search[loc])+1)
-        for i in range(loc+1,len(search)):
+        cut = False
+        for i in range(loc+1,len(search)):            
             if search[i].isdigit():
                 search[i] = "0"
-        return "".join(search)
+            if search[i] == ".":
+                cut = True
+        result = "".join(search)
+        if cut:
+            result = result.split(".")[0]
+        return result
 
     @classmethod
     def round(cls,number,nsf):        
