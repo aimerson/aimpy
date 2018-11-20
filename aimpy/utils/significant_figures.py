@@ -3,6 +3,7 @@
 
 import copy
 import re
+import numpy as np
 
 class SigFig(object):
 
@@ -66,6 +67,23 @@ class SigFig(object):
                 search[i] = "0"
         search = cls.tidyup(search,loc)
         result = "".join(search)
+        return result
+
+    @classmethod
+    def force_float(cls,number):
+        M = re.search('(?P<sign>-)?(?P<mantissa>[\d\.]+)(?P<exp>[Ee]-?\+?[\d]+)?',str(number))
+        if M.group('exp') is None:
+            return number
+        exp = int(M.group('exp').lower().replace("e",""))        
+        digits = M.group('mantissa').replace(".","")
+        if exp < 0:
+            result = "0."+"".join(["0"]*(int(np.fabs(exp)-1)))+digits
+        else:
+            result = digits + "".join(["0"]*(exp-len(digits)))
+        sign = ""
+        if M.group('sign') is not None:
+            sign = "-"
+        result = sign + result
         return result
 
     @classmethod
