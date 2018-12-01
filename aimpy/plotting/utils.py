@@ -328,15 +328,15 @@ def ImageStats2D(ax,X,Y,Xbins,Ybins,Z=None,statistic="count",\
     statistic can be: mean,median,sum,product,std,var,percentile,avg,max,min,mode                                                                                                                                           
     NB 'avg' is weighted average                                                                                                                                                                                            
     """
-    # Calculate statistic in 2-dimension bins                                                                                                                                                                               
-    data,xedges,yedges,numb = binstats2D(X,Y,Xbins,Ybins=Ybins,Z=Z,\
-                                             statistic=statistic,weights=weights)
+    # Calculate statistic in 2-dimension bins
+    data,xedges,yedges,numb = binstats2D(X,Y,Xbins,Ybins=Ybins,Z=Z,
+                                         statistic=statistic,weights=weights)
     if func is not None:
         data = func(data)
     if np.any(np.isinf(data)):
         np.place(data,np.isinf(data),np.NaN)
     extent = [xedges[0],xedges[-1],yedges[0],yedges[-1]]
-    # Set default preferences for selected keyword arguments                                                                                                                                                                
+    # Set default preferences for selected keyword arguments
     if "extent" not in kwargs.keys():
         kwargs["extent"] = extent
     if "interpolation" not in kwargs.keys():
