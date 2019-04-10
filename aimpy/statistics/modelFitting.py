@@ -37,7 +37,7 @@ class chiSquared(object):
         result = self.chiSquared(model(self.obsX))
         if reduced:
             if dof is not None:
-                result /= flaot(dof)
+                result /= float(dof)
             else:
                 result /= float(len(self.obsY))*2-2.0
         return result
